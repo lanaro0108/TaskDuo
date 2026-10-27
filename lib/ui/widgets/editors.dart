@@ -101,7 +101,7 @@ class _TaskEditorState extends State<TaskEditor> {
                 .map(
                   (d) => DropdownMenuItem(
                     value: d,
-                    child: Text('${d.label} · ${d.xp} XP · ${d.coins} moedas'),
+                    child: Text('${d.label} · ${d.xp} pontos'),
                   ),
                 )
                 .toList(),
@@ -192,7 +192,7 @@ Future<void> showTaskDetails(BuildContext context, HouseTask task) async {
                 _Detail('Dificuldade', task.difficulty.label),
                 _Detail('Prazo', shortDate(task.due)),
                 _Detail('Frequência', task.recurrence.label),
-                _Detail('Você ganha', '${task.xp} XP + ${task.coins} moedas'),
+                _Detail('Você ganha', '${task.xp} pontos e ${task.xp} XP'),
               ],
             ),
           ),
@@ -304,14 +304,12 @@ class RewardEditor extends StatefulWidget {
 class _RewardEditorState extends State<RewardEditor> {
   final _form = GlobalKey<FormState>();
   final _title = TextEditingController(),
-      _description = TextEditingController(),
-      _cost = TextEditingController(text: '50');
+      _description = TextEditingController();
   String _art = 'gift';
   @override
   void dispose() {
     _title.dispose();
     _description.dispose();
-    _cost.dispose();
     super.dispose();
   }
 
@@ -364,27 +362,12 @@ class _RewardEditorState extends State<RewardEditor> {
           decoration: const InputDecoration(labelText: 'Descrição (opcional)'),
         ),
         const SizedBox(height: 10),
-        TextFormField(
-          controller: _cost,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Custo em moedas'),
-          validator: (v) {
-            final n = int.tryParse(v ?? '');
-            return n == null || n < 1 || n > 9999
-                ? 'Use um valor entre 1 e 9999.'
-                : null;
-          },
-        ),
         const SizedBox(height: 24),
         FilledButton(
           onPressed: () {
             if (!_form.currentState!.validate()) return;
-            DuoScope.of(context).addReward(
-              _title.text,
-              _description.text,
-              int.parse(_cost.text),
-              _art,
-            );
+            DuoScope.of(context)
+                .addReward(_title.text, _description.text, _art);
             Navigator.pop(context);
             toast(
               context,
@@ -429,31 +412,63 @@ class _MemberEditorState extends State<MemberEditor> {
           'Seu jeitinho de ser',
           subtitle: 'Personalize seu nome e seu avatar.',
         ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: List.generate(
-            4,
-            (i) => Semantics(
-              label: 'Avatar ${i + 1}',
-              selected: _avatar == i,
-              button: true,
-              child: InkWell(
-                onTap: () => setState(() => _avatar = i),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _avatar == i ? Brand.purple : Colors.transparent,
-                      width: 2,
-                    ),
-                  ),
-                  child: Avatar(widget.member.copyWith(avatar: i), size: 57),
-                ),
-              ),
+        for (final masculine in [false, true]) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 10),
+            child: Text(
+              masculine ? 'Masculinos' : 'Femininos',
+              style: Theme.of(context).textTheme.titleSmall,
             ),
           ),
-        ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < avatarOptions.length; i++)
+                if (avatarOptions[i].masculine == masculine)
+                  Semantics(
+                    label: avatarOptions[i].label,
+                    selected: _avatar == i,
+                    button: true,
+                    excludeSemantics: true,
+                    onTap: () => setState(() => _avatar = i),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => setState(() => _avatar = i),
+                      child: Container(
+                        width: 76,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _avatar == i ? Palette.of(context).tint : null,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _avatar == i
+                                ? Brand.purple
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Avatar(widget.member.copyWith(avatar: i), size: 54),
+                            const SizedBox(height: 5),
+                            Text(
+                              avatarOptions[i].label.split('cabelo ').last,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+        ],
         const SizedBox(height: 22),
         TextFormField(
           controller: _name,

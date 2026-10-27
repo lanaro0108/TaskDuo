@@ -58,6 +58,12 @@ class _PortraitPainter extends CustomPainter {
     canvas.save();
     canvas.scale(size.width / 100);
     final p = Paint()..isAntiAlias = true;
+    final option = avatarOptions[variant];
+    final masculine = option.masculine;
+    final darkSkin = variant == 4 || variant == 7 || variant == 9;
+    final skin = darkSkin ? const Color(0xffbd815d) : const Color(0xfff8c49e);
+    final shadow = darkSkin ? const Color(0xff925b43) : const Color(0xffefb18a);
+    final light = darkSkin ? const Color(0xffd59970) : const Color(0xffffd9b5);
     final bg = [
       const Color(0xffcbb5ff),
       const Color(0xffb8dcff),
@@ -74,14 +80,34 @@ class _PortraitPainter extends CustomPainter {
     p.color = hair;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(19, 12, 64, 87),
+        masculine
+            ? const Rect.fromLTWH(23, 15, 56, 48)
+            : const Rect.fromLTWH(19, 12, 64, 87),
         const Radius.circular(32),
       ),
       p,
     );
-    p.color = variant == 2 ? const Color(0xff659cdd) : const Color(0xffab79e8);
+    if (option.curly) {
+      for (var i = 0; i < 9; i++) {
+        final angle = math.pi + i * math.pi / 8;
+        canvas.drawCircle(
+          Offset(51 + 27 * math.cos(angle), 41 + 25 * math.sin(angle)),
+          11,
+          p,
+        );
+      }
+      if (!masculine) {
+        for (var i = 0; i < 4; i++) {
+          canvas.drawCircle(Offset(23, 44 + i * 12), 11, p);
+          canvas.drawCircle(Offset(78, 44 + i * 12), 11, p);
+        }
+      }
+    }
+    p.color = masculine || variant == 2
+        ? const Color(0xff659cdd)
+        : const Color(0xffab79e8);
     canvas.drawOval(const Rect.fromLTWH(20, 76, 64, 48), p);
-    p.color = const Color(0xffefb18a);
+    p.color = shadow;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         const Rect.fromLTWH(43, 63, 17, 21),
@@ -89,13 +115,13 @@ class _PortraitPainter extends CustomPainter {
       ),
       p,
     );
-    p.color = const Color(0xfffee3cc);
+    p.color = Color.lerp(light, Colors.white, .2)!;
     canvas.drawOval(const Rect.fromLTWH(41, 75, 21, 9), p);
-    p.color = const Color(0xfff8c49e);
+    p.color = skin;
     canvas.drawOval(const Rect.fromLTWH(25, 39, 12, 17), p);
     canvas.drawOval(const Rect.fromLTWH(69, 39, 12, 17), p);
-    p.shader = const LinearGradient(
-      colors: [Color(0xffffd9b5), Color(0xffefb28d)],
+    p.shader = LinearGradient(
+      colors: [light, shadow],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     ).createShader(const Rect.fromLTWH(31, 25, 44, 47));
@@ -108,13 +134,42 @@ class _PortraitPainter extends CustomPainter {
     );
     p.shader = null;
     p.color = hair;
-    final fringe = Path()
-      ..moveTo(24, 45)
-      ..cubicTo(24, 8, 70, 4, 79, 33)
-      ..lineTo(76, 49)
-      ..cubicTo(66, 40, 61, 29, 59, 26)
-      ..cubicTo(49, 41, 39, 43, 24, 45);
+    final fringe = masculine
+        ? (Path()
+            ..moveTo(26, 42)
+            ..lineTo(28, 23)
+            ..quadraticBezierTo(53, 7, 77, 27)
+            ..lineTo(76, 42)
+            ..lineTo(64, 29)
+            ..quadraticBezierTo(48, 38, 26, 42))
+        : (Path()
+            ..moveTo(24, 45)
+            ..cubicTo(24, 8, 70, 4, 79, 33)
+            ..lineTo(76, 49)
+            ..cubicTo(66, 40, 61, 29, 59, 26)
+            ..cubicTo(49, 41, 39, 43, 24, 45));
     canvas.drawPath(fringe, p);
+    if (option.curly) {
+      for (var i = 0; i < 6; i++) {
+        canvas.drawCircle(Offset(28 + i * 9, 29 + (i.isEven ? 0 : 5)), 8, p);
+      }
+      p.color = Color.lerp(hair, Colors.white, .18)!;
+      p.style = PaintingStyle.stroke;
+      p.strokeWidth = 1.5;
+      for (var i = 0; i < 6; i++) {
+        canvas.drawArc(
+          Rect.fromCircle(
+            center: Offset(28 + i * 9, 26 + (i.isEven ? 0 : 5)),
+            radius: 5,
+          ),
+          .2,
+          2.4,
+          false,
+          p,
+        );
+      }
+      p.style = PaintingStyle.fill;
+    }
     p.color = const Color(0xff8c5740);
     p.style = PaintingStyle.stroke;
     p.strokeWidth = 2.2;

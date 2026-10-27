@@ -4,14 +4,16 @@ Juntos por uma casa mais organizada. Aplicativo Flutter para organizar os cuidad
 
 ## O que funciona
 
-- **Início:** nível, XP, moedas, sequência de dias, tarefas de hoje, desafio semanal e atividade recente.
+- **Início:** nível, XP, pontos da semana, sequência de dias, tarefas de hoje, desafio semanal e atividade recente.
 - **Tarefas:** criar, editar, excluir, concluir, atribuir à dupla, buscar sem acentos, filtrar e ordenar; recorrência diária e semanal.
 - **Ranking:** semana, mês e geral; comparação da dupla, desempenho por categoria e oito conquistas com progresso.
-- **Recompensas:** catálogo, criação de prêmios, confirmação com saldo antes/depois, resgates e marcação de uso.
+- **Recompensas:** catálogo sem preços, criação de prêmios, escolha exclusiva pelo vencedor da semana e marcação de uso.
 - **Perfil:** editar nomes e avatares, alternar entre os dois perfis, evolução de XP, preferências e temas claro, escuro e do sistema.
-- **Persistência local:** tarefas, histórico, moedas, resgates, perfis e preferências sobrevivem ao fechamento do aplicativo.
+- **Persistência local:** tarefas, histórico, pontos, prêmios, perfis e preferências sobrevivem ao fechamento do aplicativo.
 
-Os dados iniciais são exemplos para reproduzir a referência. Use **Perfil → Começar minha jornada** para zerar o histórico, XP, moedas e resgates. O diálogo explica o que será mantido antes de confirmar.
+Novas instalações começam sem tarefas, prêmios ou pontuações de exemplo. Na migração da versão local 1 para a 2, exemplos são removidos e dados criados pela dupla e ações reais são preservados. Os avatares incluem opções femininas e masculinas de cabelo liso e cacheado.
+
+A disputa é semanal, de segunda a domingo. Após o fechamento, o maior placar dá direito a escolher um prêmio do catálogo, uma vez por semana vencida. Empate não dá prêmio. O XP pessoal permanece como progresso de nível; moedas não são mais usadas.
 
 Esta etapa usa dois perfis no mesmo aparelho. Contas, sincronização entre celulares, aprovação remota de tarefas e notificações do sistema pertencem à próxima etapa com Firebase. A opção de notificações atual controla o indicador de atividade dentro do app.
 
@@ -38,6 +40,7 @@ Para desenvolver com um dispositivo ou emulador Android, confira `flutter device
 ```sh
 flutter analyze
 flutter test
+TZ=America/New_York flutter test test/calendar_test.dart
 flutter build web --release --no-web-resources-cdn
 flutter build apk --debug --target-platform=android-arm64
 ```
@@ -59,7 +62,7 @@ test/                       # Regras de negócio e fluxos de interface
 docs/                       # Produto, design, arquitetura e próximos passos
 ```
 
-Veja [produto](docs/PRODUCT.md), [design system](docs/DESIGN_SYSTEM.md), [arquitetura](docs/ARCHITECTURE.md), [roadmap](docs/ROADMAP.md) e [resultados de validação](docs/VALIDATION.md).
+Veja [produto](docs/PRODUCT.md), [design system](docs/DESIGN_SYSTEM.md), [arquitetura](docs/ARCHITECTURE.md), [roadmap](docs/ROADMAP.md) e [resultados de validação](docs/VALIDATION.md). A proposta para sincronização, sequência de dias e disputa com backend está no [guia de Firebase](docs/FIREBASE.md).
 
 ## Créditos
 

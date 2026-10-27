@@ -33,7 +33,10 @@ class HomeScreen extends StatelessWidget {
                 child: InkWell(
                   onTap: () => showDuo(context),
                   customBorder: const CircleBorder(),
-                  child: Avatar(state.active, size: 43),
+                  child: SizedBox.square(
+                    dimension: 48,
+                    child: Center(child: Avatar(state.active, size: 43)),
+                  ),
                 ),
               ),
             ],
@@ -96,9 +99,9 @@ class HomeScreen extends StatelessWidget {
           children: [
             Expanded(
               child: StatCard(
-                art: 'coin',
-                value: '${state.coins(state.active.id)}',
-                label: 'Moedas',
+                art: 'trophy',
+                value: '${state.points(state.active.id)}',
+                label: 'Pontos na semana',
               ),
             ),
             const SizedBox(width: 12),

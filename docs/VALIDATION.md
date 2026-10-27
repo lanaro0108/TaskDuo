@@ -1,33 +1,32 @@
-# Validação desta entrega
+# Validação da revisão de pontos e recompensas
 
-Verificações executadas no ambiente de desenvolvimento com Flutter 3.47.8 e Dart 3.13.7.
+Verificações executadas em 27/10/2026, com Flutter 3.47.8 e Dart 3.13.7, reutilizando as dependências instaladas (`--no-pub`).
 
 | Verificação | Resultado |
 | --- | --- |
-| Instalação reutilizável + `flutter pub get --enforce-lockfile` | Concluída com código zero |
-| `dart format --output=none --set-exit-if-changed lib test` | Sem diferenças |
-| `flutter analyze` | Nenhum problema encontrado |
-| `flutter test` | 15 testes passaram: 10 de domínio e 5 de interface |
-| `flutter build web --release --no-web-resources-cdn` | Compilação concluída |
-| `flutter build apk --debug --target-platform=android-arm64` | Compilação concluída |
-| `flutter build apk --release --target-platform=android-arm64 --no-pub` | Compilação concluída; aproximadamente 20 MB |
-| `apksigner verify --verbose` | Assinaturas dos APKs verificadas |
-| Metadados do APK final | TaskDuo 0.1.0, arm64-v8a, Android API mínima 24, alvo 36 |
+| Formatação de `lib` e `test` | Concluída |
+| `flutter analyze --no-pub` | Nenhum problema encontrado |
+| `flutter test --no-pub` | 38 testes passaram |
+| `TZ=America/New_York flutter test --no-pub test/calendar_test.dart` | 3 testes passaram, incluindo início e fim do horário de verão |
+| `flutter build web --release --no-web-resources-cdn --no-pub` | Compilação concluída |
+| `flutter build apk --debug --target-platform=android-arm64 --no-pub` | Compilação concluída |
+| Chromium em 320 e 430 px, claro e escuro | Cinco telas, criação de tarefa/prêmio, escolha de avatar e persistência após recarregar; sem erros de página |
 
-## Regras e interface
+## Cobertura funcional
 
-Os testes exercitam conclusão sem crédito duplicado, rejeição de edição desatualizada de tarefa já concluída, recorrência futura, saldo insuficiente, isolamento de saldos e resgates entre perfis, persistência de várias alterações em sequência, bônus semanal único, sequência de dias, períodos do ranking, edição/exclusão, validação de dados e falhas de armazenamento.
+Os testes de domínio cobrem primeira criação de recompensa com catálogo vazio, tarefas sem duplicação de pontos, recorrência bloqueada no futuro, fechamento domingo/segunda, empate sem prêmio, tentativa pelo perfil perdedor, uma escolha por semana, escolha de vitórias antigas e uso exclusivo pelo dono. O histórico e o XP permanecem após reiniciar a pontuação semanal.
 
-Os testes de widgets percorrem conclusão na Home, criação/busca/conclusão, resgate e uso de recompensas, troca de tema, as cinco abas na largura de 320 px e navegação desktop em 1440 px.
+A sequência usa dias distintos, conserva ontem até o fim de hoje, mantém recorde e conquista após uma interrupção e sobrevive à exclusão da tarefa concluída e ao recarregamento. Os testes incluem virada de mês/ano e dias com 23/25 horas em `America/New_York`.
 
-No Chromium, com locale pt-BR e fuso America/Sao_Paulo, a aplicação foi executada de fato e verificada em 430 × 932 px. A revisão percorreu as cinco telas em claro e escuro, confirmou o tema e uma conclusão após recarregar a página, concluiu uma tarefa com a página sem conexão e resgatou uma recompensa. Essa execução não gerou erros de página, falhas de requisição nem requisições para recursos externos. A ação offline foi testada depois do carregamento; isso não afirma que um navegador sem cache abre a aplicação sem conexão.
+A persistência é testada com migração 1 → 2, remoção de exemplos, preservação de itens personalizados e ações reais, arquivo dos resgates antigos, gravações em fila, falha/repetição de gravação e rejeição de dados inválidos sem sobrescrever o original. Casos inválidos incluem membros/IDs duplicados, responsável inexistente, pontos negativos, avatar/arte desconhecidos, história inconsistente, preferências com tipo incorreto e versão/data de competição inválida.
 
-Também foram geradas capturas desktop em 1440 × 1000 px. Veja [as dez telas](screenshots/overview.png) e os demais arquivos em `screenshots/`.
+Os widgets exercitam criação/busca/conclusão, primeira recompensa sem preço, escolha/uso de prêmio pelo vencedor, os dez avatares com persistência de um masculino cacheado, atualização ao retomar e à meia-noite, as cinco telas em 320/430 px e nos dois temas, texto em 200%, alvos Android de no mínimo 48 × 48 dp e navegação desktop.
 
-## Limites da validação
+As capturas antigas em `docs/screenshots` documentam a versão anterior, com dados de exemplo e moedas; não representam a interface atual. Capturas de conferência desta revisão ficam no diretório temporário de trabalho.
 
-- O APK foi compilado e sua assinatura foi verificada. A execução em um celular ou emulador Android ainda precisa ser conferida; não há dispositivo Android conectado neste ambiente.
-- O APK em modo release desta etapa usa a chave de desenvolvimento. Distribuição pública exige configuração de assinatura própria.
-- Os perfis e dados são locais. Firebase, autenticação, sincronização e notificações do sistema pertencem à próxima etapa.
-- O workflow de GitHub Actions foi criado; sua execução no GitHub não foi realizada nesta entrega.
-- Scripts e instruções do ambiente foram salvos no rascunho. Publicação e restauração em uma nova tarefa são etapas separadas, ainda não verificadas.
+## Limites
+
+- O APK debug foi compilado; não foi executado em um aparelho ou emulador Android nesta revisão.
+- O build release e a assinatura de distribuição não foram revalidados. A configuração existente de release usa chave de desenvolvimento.
+- O app continua local. A validação no servidor, proteção contra relógio adulterado, fuso único da casa e concorrência entre celulares dependem da implementação futura descrita em [FIREBASE.md](FIREBASE.md).
+- Não foram configurados Firebase, credenciais ou recursos remotos; o guia descreve arquitetura, política offline, etapas e testes recomendados.

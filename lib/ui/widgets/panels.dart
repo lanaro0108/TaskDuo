@@ -8,6 +8,40 @@ import 'art.dart';
 import 'components.dart';
 import 'editors.dart';
 
+class StreakCard extends StatelessWidget {
+  const StreakCard({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final state = DuoScope.of(context);
+    final summary = state.streakSummary(state.active.id);
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Sua sequência', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 7),
+          Text(
+            'Atual: ${summary.current} dias · Recorde: ${summary.longest} dias',
+          ),
+          const SizedBox(height: 7),
+          Text(
+            summary.completedToday
+                ? 'Hoje já contou. Muito bem!'
+                : summary.current > 0
+                ? 'Conclua uma tarefa hoje para manter a sequência.'
+                : 'Sua próxima tarefa começa uma nova sequência.',
+          ),
+          const SizedBox(height: 7),
+          Text(
+            'Uma ou mais tarefas no mesmo dia contam como um dia. A sequência de ontem vale até o fim de hoje. Seu recorde e as conquistas permanecem.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ScreenHeader extends StatelessWidget {
   const ScreenHeader(
     this.title, {
@@ -403,9 +437,7 @@ Future<void> showEvolution(BuildContext context) => duoSheet<void>(
                               ),
                               const SizedBox(height: 9),
                               Text(
-                                shortDate(
-                                  state.today.subtract(Duration(days: 6 - i)),
-                                ),
+                                shortDate(addCalendarDays(state.today, i - 6)),
                                 style: const TextStyle(fontSize: 9),
                               ),
                             ],

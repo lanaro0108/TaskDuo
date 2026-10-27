@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../data/local_store.dart';
 import 'models.dart';
+import 'household_snapshot.dart';
 
 class DuoState extends ChangeNotifier {
   DuoState(this.store, {DateTime Function()? clock})
@@ -28,6 +29,8 @@ class DuoState extends ChangeNotifier {
   Future<void> _writes = Future.value();
   int _sequence = 0;
   bool _readFailed = false;
+  DateTime? _lastObservedDay;
+  late DateTime _competitionStart;
   List<Member> get members => List.unmodifiable(_members);
   List<HouseTask> get tasks => List.unmodifiable(_tasks);
   List<Completion> get completions => List.unmodifiable(_completions);
@@ -42,57 +45,69 @@ class DuoState extends ChangeNotifier {
   bool get sounds => _sounds;
   bool get sampleData => _sampleData;
   DateTime get today => dayOnly(clock());
+  DateTime get competitionStart => _competitionStart;
   String _id() => '${clock().microsecondsSinceEpoch}-${_sequence++}';
   Member member(String id) => _members.firstWhere((m) => m.id == id);
+  void refreshDate() {
+    if (_lastObservedDay == today) return;
+    _lastObservedDay = today;
+    notifyListeners();
+  }
+
   Future<void> load() async {
     try {
       final saved = await store.read();
-      _readFailed = false;
       if (saved == null) {
         _seed();
-        return;
+      } else {
+        final json = jsonDecode(saved) as Map<String, dynamic>;
+        final snapshot = HouseholdSnapshot(json);
+        _members = snapshot.members;
+        _tasks = snapshot.tasks;
+        _completions = snapshot.completions;
+        _rewards = snapshot.rewards;
+        _redemptions = snapshot.redemptions;
+        _activities = snapshot.activities;
+        _weeklyBonuses = snapshot.weeklyBonuses.toSet();
+        _activeId = snapshot.activeId;
+        _themeMode = snapshot.theme;
+        _notifications = snapshot.notifications;
+        _animations = snapshot.animations;
+        _sounds = snapshot.sounds;
+        _sampleData = snapshot.sampleData;
+        _sequence = snapshot.sequence;
+        _competitionStart = json['version'] == 2
+            ? DateTime.parse(json['competitionStart'] as String)
+            : weekStart(today);
+        if (json['version'] == 1) {
+          _tasks.removeWhere((t) => t.id.startsWith('starter-'));
+          _rewards.removeWhere(
+            (r) => const {
+              'movie',
+              'dessert',
+              'break',
+              'music',
+              'rest',
+            }.contains(r.id),
+          );
+        }
+        if (json['version'] == 1 && _sampleData) {
+          _members = _members
+              .map((m) => Member(id: m.id, name: m.name, avatar: m.avatar))
+              .toList();
+          _completions.removeWhere(
+            (c) =>
+                c.taskId.startsWith('example-ana-') ||
+                c.taskId.startsWith('example-bruna-'),
+          );
+          _sampleData = false;
+        }
       }
-      final j = jsonDecode(saved) as Map<String, dynamic>;
-      if (j['version'] != 1) {
-        throw const FormatException('Unsupported storage version');
-      }
-      final members = (j['members'] as List)
-          .map((e) => Member.fromJson(e))
-          .toList();
-      final tasks = (j['tasks'] as List)
-          .map((e) => HouseTask.fromJson(e))
-          .toList();
-      final completions = (j['completions'] as List)
-          .map((e) => Completion.fromJson(e))
-          .toList();
-      final rewards = (j['rewards'] as List)
-          .map((e) => HouseReward.fromJson(e))
-          .toList();
-      final redemptions = (j['redemptions'] as List)
-          .map((e) => Redemption.fromJson(e))
-          .toList();
-      if (members.length != 2 || !members.any((m) => m.id == j['activeId'])) {
-        throw const FormatException('Invalid household');
-      }
-      _members = members;
-      _tasks = tasks;
-      _completions = completions;
-      _rewards = rewards;
-      _redemptions = redemptions;
-      _activities = (j['activities'] as List)
-          .map((e) => HouseActivity.fromJson(e))
-          .toList();
-      _weeklyBonuses = (j['weeklyBonuses'] as List).cast<String>().toSet();
-      _activeId = j['activeId'];
-      _themeMode = ThemeMode.values.byName(j['theme']);
-      _notifications = j['notifications'];
-      _animations = j['animations'];
-      _sounds = j['sounds'];
-      _sampleData = j['sampleData'];
-      _sequence = j['sequence'] as int? ?? 0;
+      _readFailed = false;
+      _lastObservedDay = today;
       persistenceError = null;
     } catch (_) {
-      _seed();
+      if (_members.isEmpty) _seed();
       _readFailed = true;
       persistenceError = 'Não conseguimos ler os dados salvos. Seus dados anteriores não foram sobrescritos. Tente carregar novamente.';
     }
@@ -100,7 +115,8 @@ class DuoState extends ChangeNotifier {
   }
 
   Map<String, dynamic> _json() => {
-    'version': 1,
+    'version': 2,
+    'competitionStart': dayKey(_competitionStart),
     'sequence': _sequence,
     'members': _members.map((e) => e.toJson()).toList(),
     'tasks': _tasks.map((e) => e.toJson()).toList(),
@@ -117,6 +133,7 @@ class DuoState extends ChangeNotifier {
     'sampleData': _sampleData,
   };
   void _changed() {
+    _lastObservedDay = today;
     notifyListeners();
     // A failed read must never silently replace a potentially recoverable save.
     if (_readFailed) return;
@@ -168,6 +185,10 @@ class DuoState extends ChangeNotifier {
     if (name.trim().isEmpty || name.trim().length > 24) {
       throw ArgumentError('Use um nome de 1 a 24 caracteres.');
     }
+    if (avatar < 0 || avatar >= avatarOptions.length) {
+      throw ArgumentError('Escolha um dos avatares disponíveis.');
+    }
+    member(id);
     final i = _members.indexWhere((m) => m.id == id);
     _members[i] = _members[i].copyWith(name: name.trim(), avatar: avatar);
     _changed();
@@ -176,31 +197,75 @@ class DuoState extends ChangeNotifier {
   int xp(String id) =>
       member(id).baseXp +
       _completions.where((c) => c.memberId == id).fold(0, (a, c) => a + c.xp);
-  int coins(String id) =>
-      _completions
-          .where((c) => c.memberId == id)
-          .fold(0, (a, c) => a + c.coins) +
-      _weeklyBonuses.length * 50 -
-      _redemptions.where((r) => r.memberId == id).fold(0, (a, r) => a + r.cost);
+  int points(String id) => periodXp(id, 0);
+
+  List<CompetitionResult> get closedCompetitions {
+    final periods = <String, DateTime>{};
+    final current = weekStart(today);
+    for (final c in _completions) {
+      final start = weekStart(c.at.toLocal());
+      if (!start.isBefore(_competitionStart) && start.isBefore(current)) {
+        periods[dayKey(start)] = start;
+      }
+    }
+    return periods.values
+        .map(
+          (start) => CompetitionResult(
+            start: start,
+            scores: {
+              for (final m in _members)
+                m.id: _completions
+                    .where(
+                      (c) =>
+                          c.memberId == m.id &&
+                          !c.at.isBefore(start) &&
+                          c.at.isBefore(addCalendarDays(start, 7)),
+                    )
+                    .fold(0, (sum, c) => sum + c.xp),
+            },
+          ),
+        )
+        .toList()
+      ..sort((a, b) => b.start.compareTo(a.start));
+  }
+
+  List<CompetitionResult> get unclaimedWins => closedCompetitions
+      .where(
+        (period) =>
+            period.winnerId == active.id &&
+            !_redemptions.any((r) => r.periodKey == period.key),
+      )
+      .toList();
   int level(String id) => xp(id) ~/ 500 + 1;
   int completedCount(String id) =>
       member(id).baseCompleted +
       _completions.where((c) => c.memberId == id).length;
-  int streak(String id) {
-    final dates = _completions
-        .where((c) => c.memberId == id)
-        .map((c) => dayKey(c.at))
-        .toSet();
-    var cursor = dates.contains(dayKey(today))
-        ? today
-        : today.subtract(const Duration(days: 1));
-    var result = 0;
-    while (dates.contains(dayKey(cursor))) {
-      result++;
-      cursor = cursor.subtract(const Duration(days: 1));
+  StreakSummary streakSummary(String id) {
+    final currentDay = calendarDayNumber(today);
+    final dates =
+        _completions
+            .where((c) => c.memberId == id)
+            .map((c) => calendarDayNumber(c.at.toLocal()))
+            .where((day) => day <= currentDay)
+            .toSet()
+            .toList()
+          ..sort();
+    var run = 0, longest = 0;
+    int? previous;
+    for (final day in dates) {
+      run = previous != null && day == previous + 1 ? run + 1 : 1;
+      longest = math.max(longest, run);
+      previous = day;
     }
-    return result;
+    return StreakSummary(
+      current: previous != null && currentDay - previous <= 1 ? run : 0,
+      longest: longest,
+      completedToday: previous == currentDay,
+    );
   }
+
+  int streak(String id) => streakSummary(id).current;
+  int longestStreak(String id) => streakSummary(id).longest;
 
   List<Completion> inPeriod(int period, {String? id}) =>
       _completions.where((c) {
@@ -209,8 +274,7 @@ class DuoState extends ChangeNotifier {
             ? weekStart(today)
             : DateTime(today.year, today.month);
         return period == 2 ||
-            (!c.at.isBefore(start) &&
-                c.at.isBefore(today.add(const Duration(days: 1))));
+            (!c.at.isBefore(start) && c.at.isBefore(addCalendarDays(today, 1)));
       }).toList();
   int periodXp(String id, int period) =>
       (period == 2 ? member(id).baseXp : 0) +
@@ -234,6 +298,9 @@ class DuoState extends ChangeNotifier {
     if (title.trim().isEmpty || title.trim().length > 70) {
       throw ArgumentError('Use um título de 1 a 70 caracteres.');
     }
+    if (description.trim().length > 240) {
+      throw ArgumentError('Use uma descrição de até 240 caracteres.');
+    }
     member(memberId);
     if (existing?.done ?? false) {
       throw StateError('Uma tarefa concluída faz parte do histórico.');
@@ -250,9 +317,7 @@ class DuoState extends ChangeNotifier {
       xp: existing != null && existing.difficulty == difficulty
           ? existing.xp
           : difficulty.xp,
-      coins: existing != null && existing.difficulty == difficulty
-          ? existing.coins
-          : difficulty.coins,
+      coins: 0,
     );
     if (existing == null) {
       _tasks.add(task);
@@ -289,15 +354,16 @@ class DuoState extends ChangeNotifier {
       memberId: task.memberId,
       at: at,
       xp: task.xp,
-      coins: task.coins,
+      coins: 0,
       category: task.category,
     );
     _tasks[i] = task.complete(at);
     _completions.add(completion);
     if (task.recurrence != Recurrence.none) {
       final base = task.due.isAfter(today) ? task.due : today;
-      final next = base.add(
-        Duration(days: task.recurrence == Recurrence.daily ? 1 : 7),
+      final next = addCalendarDays(
+        base,
+        task.recurrence == Recurrence.daily ? 1 : 7,
       );
       _tasks.add(
         HouseTask(
@@ -309,7 +375,7 @@ class DuoState extends ChangeNotifier {
           difficulty: task.difficulty,
           due: dayOnly(next),
           xp: task.xp,
-          coins: task.coins,
+          coins: 0,
           recurrence: task.recurrence,
         ),
       );
@@ -320,17 +386,32 @@ class DuoState extends ChangeNotifier {
     );
     if (weeklyCount >= 10 && !challengeClaimed) {
       _weeklyBonuses.add(dayKey(weekStart(today)));
-      _log('Desafio da semana concluído! +50 moedas para cada.', 'gift');
+      _log(
+        'Desafio da semana concluído! A dupla cuidou de dez tarefas.',
+        'star',
+      );
     }
     _changed();
     return completion;
   }
 
-  String? redeem(String rewardId) {
+  String? redeem(String rewardId, {String? periodKey}) {
     final reward = _rewards.where((r) => r.id == rewardId).firstOrNull;
     if (reward == null) return 'Esta recompensa não está mais disponível.';
-    if (coins(active.id) < reward.cost) {
-      return 'Faltam ${reward.cost - coins(active.id)} moedas para esta recompensa.';
+    final period = periodKey == null
+        ? unclaimedWins.firstOrNull
+        : closedCompetitions.where((p) => p.key == periodKey).firstOrNull;
+    if (period == null) {
+      return 'Aguarde o encerramento de uma semana em que você venceu.';
+    }
+    if (period.winnerId == null) {
+      return 'A semana terminou empatada, sem recompensa.';
+    }
+    if (period.winnerId != active.id) {
+      return 'Somente o vencedor desta semana pode escolher uma recompensa.';
+    }
+    if (_redemptions.any((r) => r.periodKey == period.key)) {
+      return 'A recompensa desta semana já foi escolhida.';
     }
     _redemptions.add(
       Redemption(
@@ -339,7 +420,8 @@ class DuoState extends ChangeNotifier {
         title: reward.title,
         art: reward.art,
         memberId: active.id,
-        cost: reward.cost,
+        cost: 0,
+        periodKey: period.key,
         at: clock(),
       ),
     );
@@ -357,19 +439,18 @@ class DuoState extends ChangeNotifier {
     _changed();
   }
 
-  void addReward(String title, String description, int cost, String art) {
+  void addReward(String title, String description, String art) {
     if (title.trim().isEmpty ||
         title.trim().length > 70 ||
-        cost < 1 ||
-        cost > 9999) {
-      throw ArgumentError('Confira o nome e o custo da recompensa.');
+        description.trim().length > 160 ||
+        !supportedArtNames.contains(art)) {
+      throw ArgumentError('Confira o nome e a descrição da recompensa.');
     }
     _rewards.add(
       HouseReward(
         id: _id(),
         title: title.trim(),
         description: description.trim(),
-        cost: cost,
         art: art,
       ),
     );
@@ -390,7 +471,7 @@ class DuoState extends ChangeNotifier {
         '7 dias seguidos',
         'Complete tarefas por 7 dias seguidos.',
         'fire',
-        streak(id),
+        longestStreak(id),
         7,
       ),
       Achievement(
@@ -444,7 +525,7 @@ class DuoState extends ChangeNotifier {
         .where(
           (c) =>
               c.memberId == id &&
-              dayKey(c.at) == dayKey(today.subtract(Duration(days: 6 - i))),
+              dayKey(c.at.toLocal()) == dayKey(addCalendarDays(today, i - 6)),
         )
         .fold(0, (sum, c) => sum + c.xp),
   );
@@ -459,6 +540,7 @@ class DuoState extends ChangeNotifier {
     _activities.clear();
     _tasks.removeWhere((t) => t.done);
     _sampleData = false;
+    _competitionStart = weekStart(today);
     _log('Um novo começo para a sua dupla!', 'sparkles');
     _changed();
   }
@@ -472,20 +554,8 @@ class DuoState extends ChangeNotifier {
 
   void _seed() {
     _members = [
-      Member(
-        id: 'ana',
-        name: 'Ana',
-        avatar: 0,
-        baseXp: 2000,
-        baseCompleted: 33,
-      ),
-      Member(
-        id: 'bruna',
-        name: 'Bruna',
-        avatar: 1,
-        baseXp: 2000,
-        baseCompleted: 28,
-      ),
+      Member(id: 'ana', name: 'Ana', avatar: 0),
+      Member(id: 'bruna', name: 'Bruna', avatar: 1),
     ];
     _activeId = 'ana';
     _tasks = [];
@@ -493,116 +563,13 @@ class DuoState extends ChangeNotifier {
     _redemptions = [];
     _weeklyBonuses = {};
     _activities = [];
-    final values = [30, 25, 20, 40, 35, 30, 20, 25, 30, 15, 25, 25];
-    for (var i = 0; i < values.length; i++) {
-      _completions.add(
-        Completion(
-          taskId: 'example-ana-$i',
-          title: 'Cuidar da casa',
-          memberId: 'ana',
-          at: today
-              .subtract(Duration(days: i % 7))
-              .add(const Duration(hours: 8)),
-          xp: values[i],
-          coins: 10,
-          category: TaskCategory.values[i % 5],
-        ),
-      );
-      if (i < 10) {
-        _completions.add(
-          Completion(
-            taskId: 'example-bruna-$i',
-            title: 'Cuidar da casa',
-            memberId: 'bruna',
-            at: today
-                .subtract(Duration(days: i % 6))
-                .add(const Duration(hours: 9)),
-            xp: 28,
-            coins: 10,
-            category: TaskCategory.values[(i + 1) % 5],
-          ),
-        );
-      }
-    }
-    final titles = [
-      'Lavar a louça',
-      'Organizar o quarto',
-      'Limpar o banheiro',
-      'Tirar o lixo',
-      'Limpar a sala',
-    ];
-    final categories = [
-      TaskCategory.kitchen,
-      TaskCategory.bedroom,
-      TaskCategory.bathroom,
-      TaskCategory.general,
-      TaskCategory.living,
-    ];
-    final points = [20, 15, 25, 10, 20];
-    for (var i = 0; i < titles.length; i++) {
-      _tasks.add(
-        HouseTask(
-          id: 'starter-$i',
-          title: titles[i],
-          description: [
-            'Deixar a pia e a bancada limpinhas.',
-            'Guardar as roupas e arrumar a cama.',
-            'Limpar a pia, o vaso e o chão.',
-            'Separar a reciclagem e levar o lixo.',
-            'Guardar os objetos e limpar o chão.',
-          ][i],
-          memberId: i == 1 || i == 4 ? 'bruna' : 'ana',
-          category: categories[i],
-          difficulty: i == 2 ? Difficulty.medium : Difficulty.easy,
-          due: today.add(Duration(days: i == 3 ? 1 : 0)),
-          xp: points[i],
-          coins: i == 2 ? 10 : 5,
-          recurrence: i == 0 ? Recurrence.daily : Recurrence.none,
-        ),
-      );
-    }
-    _rewards = const [
-      HouseReward(
-        id: 'movie',
-        title: 'Escolher o filme da noite',
-        description: 'Uma noite de cinema do seu jeito!',
-        cost: 50,
-        art: 'popcorn',
-      ),
-      HouseReward(
-        id: 'dessert',
-        title: 'Pedir sobremesa',
-        description: 'Seu doce favorito para adoçar o dia.',
-        cost: 100,
-        art: 'icecream',
-      ),
-      HouseReward(
-        id: 'break',
-        title: 'Folga de uma tarefa leve',
-        description: 'Combine com sua dupla e aproveite a pausa.',
-        cost: 80,
-        art: 'sleep',
-      ),
-      HouseReward(
-        id: 'music',
-        title: 'Escolher a música da limpeza',
-        description: 'Hoje você comanda a playlist!',
-        cost: 30,
-        art: 'music',
-      ),
-      HouseReward(
-        id: 'rest',
-        title: 'Tempo extra de descanso',
-        description: 'Um tempinho no sofá. Você merece.',
-        cost: 150,
-        art: 'sofa',
-      ),
-    ];
-    _log('Sua dupla está pronta. Vamos cuidar da casa juntos?', 'gift');
+    _rewards = [];
+    _sampleData = false;
+    _competitionStart = weekStart(today);
   }
 
   int get todayDone =>
-      _tasks.where((t) => t.done && dayOnly(t.completedAt!) == today).length;
+      _completions.where((c) => dayOnly(c.at.toLocal()) == today).length;
   int get todayTotal => todayTasks.length + todayDone;
   double get dailyProgress =>
       todayTotal == 0 ? 0 : (todayDone / math.max(1, todayTotal));

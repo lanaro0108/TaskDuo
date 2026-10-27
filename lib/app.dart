@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'domain/duo_state.dart';
+import 'domain/models.dart';
 import 'ui/theme.dart';
 import 'ui/widgets/art.dart';
 import 'ui/widgets/components.dart';
@@ -45,8 +48,55 @@ class _AppShell extends StatefulWidget {
   State<_AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<_AppShell> {
+class _AppShellState extends State<_AppShell> with WidgetsBindingObserver {
   int _selected = 0;
+  DuoState? _state;
+  Timer? _dayTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = DuoScope.of(context);
+    if (!identical(state, _state)) {
+      _state = state;
+      _scheduleDayRefresh();
+    }
+  }
+
+  void _scheduleDayRefresh() {
+    _dayTimer?.cancel();
+    final now = _state!.clock();
+    final delay = addCalendarDays(now, 1).difference(now);
+    _dayTimer = Timer(delay + const Duration(milliseconds: 50), () {
+      if (!mounted) return;
+      _state!.refreshDate();
+      _scheduleDayRefresh();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _state?.refreshDate();
+      if (_state != null) _scheduleDayRefresh();
+    } else {
+      _dayTimer?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _dayTimer?.cancel();
+    super.dispose();
+  }
+
   static const _labels = [
     'Início',
     'Tarefas',

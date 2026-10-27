@@ -31,12 +31,66 @@ enum Recurrence {
 }
 
 DateTime dayOnly(DateTime v) => DateTime(v.year, v.month, v.day);
+// Calendar arithmetic must not assume that a local day lasts 24 hours.
+DateTime addCalendarDays(DateTime v, int days) =>
+    DateTime(v.year, v.month, v.day + days);
+int calendarDayNumber(DateTime v) =>
+    DateTime.utc(v.year, v.month, v.day).millisecondsSinceEpoch ~/
+    Duration.millisecondsPerDay;
 String dayKey(DateTime v) =>
     '${v.year}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')}';
-DateTime weekStart(DateTime v) =>
-    dayOnly(v).subtract(Duration(days: v.weekday - 1));
+DateTime weekStart(DateTime v) => addCalendarDays(v, 1 - v.weekday);
 String shortDate(DateTime v) =>
     '${v.day.toString().padLeft(2, '0')}/${v.month.toString().padLeft(2, '0')}';
+
+class AvatarOption {
+  const AvatarOption(this.label, {this.masculine = false, this.curly = false});
+  final String label;
+  final bool masculine, curly;
+}
+
+// Indices 0–3 retain the portraits used by existing version 1 saves.
+const avatarOptions = [
+  AvatarOption('Feminino, cabelo liso 1'),
+  AvatarOption('Feminino, cabelo liso 2'),
+  AvatarOption('Feminino, cabelo liso 3'),
+  AvatarOption('Feminino, cabelo liso 4'),
+  AvatarOption('Feminino, cabelo cacheado 1', curly: true),
+  AvatarOption('Feminino, cabelo cacheado 2', curly: true),
+  AvatarOption('Masculino, cabelo liso 1', masculine: true),
+  AvatarOption('Masculino, cabelo cacheado 1', masculine: true, curly: true),
+  AvatarOption('Masculino, cabelo liso 2', masculine: true),
+  AvatarOption('Masculino, cabelo cacheado 2', masculine: true, curly: true),
+];
+
+const supportedArtNames = {
+  'bed',
+  'bin',
+  'broom',
+  'bubble',
+  'coin',
+  'fire',
+  'gift',
+  'icecream',
+  'music',
+  'popcorn',
+  'sleep',
+  'sofa',
+  'sparkles',
+  'star',
+  'toilet',
+  'trophy',
+};
+
+class StreakSummary {
+  const StreakSummary({
+    required this.current,
+    required this.longest,
+    required this.completedToday,
+  });
+  final int current, longest;
+  final bool completedToday;
+}
 
 class Member {
   Member({
@@ -105,7 +159,7 @@ class HouseTask {
     difficulty: difficulty,
     due: due,
     xp: xp,
-    coins: coins,
+    coins: 0,
     recurrence: recurrence,
     completedAt: at,
   );
@@ -178,7 +232,7 @@ class HouseReward {
     required this.id,
     required this.title,
     required this.description,
-    required this.cost,
+    this.cost = 0,
     required this.art,
   });
   final String id, title, description, art;
@@ -209,11 +263,14 @@ class Redemption {
     required this.cost,
     required this.at,
     this.used = false,
+    this.periodKey,
   });
   final String id, rewardId, title, art, memberId;
   final int cost;
   final DateTime at;
   final bool used;
+  // Null identifies a redemption from the retired version 1 coin system.
+  final String? periodKey;
   Redemption markUsed() => Redemption(
     id: id,
     rewardId: rewardId,
@@ -223,6 +280,7 @@ class Redemption {
     cost: cost,
     at: at,
     used: true,
+    periodKey: periodKey,
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -233,6 +291,7 @@ class Redemption {
     'cost': cost,
     'at': at.toIso8601String(),
     'used': used,
+    if (periodKey != null) 'periodKey': periodKey,
   };
   factory Redemption.fromJson(Map<String, dynamic> j) => Redemption(
     id: j['id'],
@@ -243,7 +302,26 @@ class Redemption {
     cost: j['cost'],
     at: DateTime.parse(j['at']),
     used: j['used'],
+    periodKey: j['periodKey'] as String?,
   );
+}
+
+class CompetitionResult {
+  CompetitionResult({required this.start, required Map<String, int> scores})
+    : scores = Map.unmodifiable(scores);
+  final DateTime start;
+  final Map<String, int> scores;
+  String get key => dayKey(start);
+  DateTime get end => addCalendarDays(start, 7);
+  String? get winnerId {
+    final entries = scores.entries.toList();
+    if (entries.length != 2 || entries[0].value == entries[1].value) {
+      return null;
+    }
+    return entries[0].value > entries[1].value
+        ? entries[0].key
+        : entries[1].key;
+  }
 }
 
 class HouseActivity {

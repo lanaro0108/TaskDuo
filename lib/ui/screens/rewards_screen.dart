@@ -16,194 +16,133 @@ class RewardsScreen extends StatefulWidget {
 
 class _RewardsScreenState extends State<RewardsScreen> {
   int _tab = 0;
+  String? _periodKey;
+  String _periodLabel(CompetitionResult p) {
+    final last = addCalendarDays(p.end, -1);
+    return '${shortDate(p.start)}/${p.start.year} a ${shortDate(last)}/${last.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final state = DuoScope.of(context);
-    final p = Palette.of(context);
-    final balance = state.coins(state.active.id);
-    final available = state.rewards
-        .where((r) => _tab != 1 || r.cost <= balance)
-        .toList();
+    final state = DuoScope.of(context), p = Palette.of(context);
+    final wins = state.unclaimedWins;
+    if (!wins.any((w) => w.key == _periodKey)) {
+      _periodKey = wins.firstOrNull?.key;
+    }
     final history = state.redemptions
         .where((r) => r.memberId == state.active.id)
         .toList()
-        .reversed
-        .toList();
-    final featured = state.rewards.firstOrNull;
+        .reversed;
+    final last = state.closedCompetitions.firstOrNull;
     return ListView(
       key: const PageStorageKey('rewards'),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
       children: [
-        ScreenHeader('Recompensas', trailing: CoinLabel(balance, size: 17)),
-        if (featured != null) ...[
-          AppCard(
-            gradient: p.reward,
-            border: false,
-            onTap: () => _redeem(featured),
-            padding: const EdgeInsets.fromLTRB(18, 20, 12, 20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'DESTAQUE DA SEMANA',
-                        style: TextStyle(
-                          fontSize: 9,
-                          letterSpacing: 1.1,
-                          fontWeight: FontWeight.w900,
-                          color: p.dark
-                              ? const Color(0xffc1a4ff)
-                              : const Color(0xff8260d1),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        featured.title,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        featured.description,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 12),
-                      CoinLabel(featured.cost, suffix: ' moedas', size: 12),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Art(featured.art, size: 90),
-              ],
-            ),
+        const ScreenHeader('Recompensas'),
+        AppCard(
+          gradient: p.reward,
+          border: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Um prêmio para quem vencer',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '${state.active.name}: ${state.points(state.active.id)} pontos · ${state.partner.name}: ${state.points(state.partner.id)} pontos',
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'A disputa vai de segunda a domingo. Após o fechamento, quem tiver mais pontos escolhe uma recompensa. Empate não dá prêmio.',
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Próximo fechamento: ${shortDate(addCalendarDays(weekStart(state.today), 7))}, à meia-noite.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-        ],
+        ),
+        const SizedBox(height: 16),
+        if (wins.isNotEmpty) ...[
+          DropdownButtonFormField<String>(
+            key: ValueKey('${state.active.id}:$_periodKey'),
+            initialValue: _periodKey,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Semana que você venceu',
+            ),
+            items: wins
+                .map(
+                  (w) => DropdownMenuItem(
+                    value: w.key,
+                    child: Text(_periodLabel(w)),
+                  ),
+                )
+                .toList(),
+            onChanged: (key) => setState(() => _periodKey = key),
+          ),
+          const SizedBox(height: 10),
+          const Text('Você tem direito a um prêmio pela semana selecionada.'),
+        ] else
+          Text(
+            last == null
+                ? 'A primeira disputa ainda está em andamento.'
+                : last.winnerId == null
+                ? 'Última disputa: empate. Não houve vencedor.'
+                : 'Última disputa: ${state.member(last.winnerId!).name} venceu. ${last.winnerId == state.active.id ? 'O prêmio já foi escolhido.' : 'O prêmio pertence a esse perfil.'}',
+          ),
+        const SizedBox(height: 18),
         Segments(
-          items: const ['Todas', 'Disponíveis', 'Resgatadas'],
+          items: const ['Catálogo', 'Meus prêmios'],
           selected: _tab,
           onChanged: (i) => setState(() => _tab = i),
         ),
         const SizedBox(height: 18),
-        if (_tab == 2) ...[
-          if (history.isEmpty)
-            EmptyState(
-              title: 'Seus pequenos prazeres moram aqui',
-              message: 'Escolha uma recompensa e troque suas moedas por um momento especial.',
+        if (_tab == 0) ...[
+          if (state.rewards.isEmpty)
+            const EmptyState(
+              title: 'Qual vai ser o prêmio?',
+              message: 'Criem juntos as recompensas que combinam com vocês.',
               art: 'gift',
-              action: 'Explorar recompensas',
-              onAction: () => setState(() => _tab = 0),
             )
           else
-            ...history.map(
-              (r) => Padding(
-                padding: const EdgeInsets.only(bottom: 11),
+            ...state.rewards.map(
+              (reward) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
                 child: AppCard(
+                  onTap: _periodKey == null
+                      ? null
+                      : () => _choose(reward, _periodKey!),
                   child: Row(
                     children: [
-                      Art(r.art, size: 45),
-                      const SizedBox(width: 13),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              r.title,
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${shortDate(r.at)} · ${r.cost} moedas · ${r.used ? 'Usada' : 'Pronta para usar'}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            if (!r.used)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 7),
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    state.useRedemption(r.id);
-                                    toast(
-                                      context,
-                                      'Aproveite! Recompensa marcada como usada.',
-                                    );
-                                  },
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(0, 34),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 13,
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    'Marcar como usada',
-                                    style: TextStyle(fontSize: 11),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      if (r.used)
-                        const Icon(
-                          Icons.check_circle_rounded,
-                          size: 23,
-                          color: Brand.mint,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ] else ...[
-          if (available.isEmpty)
-            EmptyState(
-              title: 'Seu próximo prêmio está chegando',
-              message: 'Conclua mais algumas tarefas para juntar moedas.',
-              art: 'coin',
-              action: 'Ver minhas tarefas',
-              onAction: () => widget.onNavigate(1),
-            )
-          else
-            ...available.map(
-              (r) => Padding(
-                padding: const EdgeInsets.only(bottom: 11),
-                child: AppCard(
-                  onTap: () => _redeem(r),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 13,
-                    vertical: 16,
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: p.tint.withValues(alpha: .7),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Art(r.art, size: 48),
-                      ),
+                      Art(reward.art, size: 48),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              r.title,
+                              reward.title,
                               style: Theme.of(context).textTheme.titleSmall,
                             ),
-                            const SizedBox(height: 6),
-                            CoinLabel(r.cost, suffix: ' moedas', size: 11),
+                            const SizedBox(height: 5),
+                            Text(
+                              _periodKey == null
+                                  ? 'Disponível para quem vencer'
+                                  : 'Escolher como prêmio',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ],
                         ),
                       ),
                       const SizedBox(width: 8),
                       Icon(
-                        r.cost > balance
+                        _periodKey == null
                             ? Icons.lock_outline_rounded
                             : Icons.chevron_right_rounded,
-                        size: 20,
                         color: p.muted,
                       ),
                     ],
@@ -211,27 +150,65 @@ class _RewardsScreenState extends State<RewardsScreen> {
                 ),
               ),
             ),
-        ],
-        const SizedBox(height: 9),
-        OutlinedButton.icon(
-          onPressed: () => showRewardEditor(context),
-          icon: const Icon(Icons.add_rounded, size: 20),
-          label: const Text('Criar recompensa da dupla'),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          'Prêmios simples. Momentos que valem muito.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => showRewardEditor(context),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Criar recompensa da dupla'),
+          ),
+        ] else if (history.isEmpty)
+          EmptyState(
+            title: 'Seu primeiro prêmio espera por você',
+            message: 'Vença uma semana e escolha uma recompensa do catálogo.',
+            art: 'trophy',
+            action: 'Ver tarefas',
+            onAction: () => widget.onNavigate(1),
+          )
+        else
+          ...history.map(
+            (r) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: AppCard(
+                child: Row(
+                  children: [
+                    Art(r.art, size: 45),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            r.title,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            r.periodKey == null
+                                ? 'Resgate anterior à disputa por pontos'
+                                : 'Semana de ${shortDate(DateTime.parse(r.periodKey!))}/${DateTime.parse(r.periodKey!).year}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          if (r.used)
+                            const Text('Recompensa usada')
+                          else
+                            TextButton(
+                              onPressed: () => state.useRedemption(r.id),
+                              child: const Text('Marcar como usada'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
 
-  Future<void> _redeem(HouseReward reward) async {
+  Future<void> _choose(HouseReward reward, String periodKey) async {
     final state = DuoScope.of(context);
-    final balance = state.coins(state.active.id);
-    final enough = balance >= reward.cost;
     var submitted = false;
     await duoSheet<void>(
       context,
@@ -240,77 +217,26 @@ class _RewardsScreenState extends State<RewardsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Center(child: Art(reward.art, size: 100)),
-            const SizedBox(height: 14),
+            Center(child: Art(reward.art, size: 88)),
+            const SizedBox(height: 16),
             SheetHeading(reward.title, subtitle: reward.description),
-            AppCard(
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [const Text('Seu saldo'), CoinLabel(balance)],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Custo da recompensa'),
-                      CoinLabel(reward.cost),
-                    ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 9),
-                    child: Divider(color: Palette.of(c).line),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        enough ? 'Depois do resgate' : 'Ainda faltam',
-                        style: Theme.of(c).textTheme.titleSmall,
-                      ),
-                      CoinLabel((balance - reward.cost).abs()),
-                    ],
-                  ),
-                ],
-              ),
+            const Text(
+              'Você pode escolher uma recompensa por semana vencida. Confirme o prêmio combinado com sua dupla.',
             ),
             const SizedBox(height: 20),
-            if (!enough)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 16),
-                child: Text(
-                  'Mais algumas missões e esse prêmio é seu!',
-                  textAlign: TextAlign.center,
-                ),
-              ),
             FilledButton.icon(
-              onPressed: enough
-                  ? () {
-                      if (submitted) return;
-                      submitted = true;
-                      final error = state.redeem(reward.id);
-                      Navigator.pop(c);
-                      toast(
-                        context,
-                        error ??
-                            'Recompensa resgatada! Veja na aba Resgatadas.',
-                      );
-                    }
-                  : null,
-              icon: Icon(
-                enough ? Icons.redeem_rounded : Icons.lock_outline_rounded,
-              ),
-              label: Text(
-                enough
-                    ? 'Resgatar por ${reward.cost} moedas'
-                    : 'Saldo insuficiente',
-              ),
-            ),
-            const SizedBox(height: 13),
-            const Text(
-              'Combine o momento de aproveitar com a sua dupla.',
-              textAlign: TextAlign.center,
+              onPressed: () {
+                if (submitted) return;
+                submitted = true;
+                final error = state.redeem(reward.id, periodKey: periodKey);
+                Navigator.pop(c);
+                toast(
+                  context,
+                  error ?? 'Prêmio escolhido! Confira em Meus prêmios.',
+                );
+              },
+              icon: const Icon(Icons.emoji_events_outlined),
+              label: const Text('Confirmar meu prêmio'),
             ),
           ],
         ),

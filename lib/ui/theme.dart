@@ -43,6 +43,8 @@ ThemeData taskDuoTheme(Brightness brightness) {
   );
   return ThemeData(
     useMaterial3: true,
+    visualDensity: VisualDensity.standard,
+    materialTapTargetSize: MaterialTapTargetSize.padded,
     brightness: brightness,
     colorScheme: scheme,
     fontFamily: 'Nunito',

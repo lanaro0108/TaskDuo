@@ -100,7 +100,7 @@ class _TasksScreenState extends State<TasksScreen> {
                   style: IconButton.styleFrom(
                     backgroundColor: _filtered ? Brand.purple : p.raised,
                     foregroundColor: _filtered ? Colors.white : p.ink,
-                    fixedSize: const Size(47, 47),
+                    fixedSize: const Size(48, 48),
                   ),
                   icon: const Icon(Icons.tune_rounded, size: 22),
                 ),
@@ -245,7 +245,7 @@ class _TasksScreenState extends State<TasksScreen> {
               decoration: const InputDecoration(labelText: 'Ordenar por'),
               items: const [
                 DropdownMenuItem(value: 0, child: Text('Prazo mais próximo')),
-                DropdownMenuItem(value: 1, child: Text('Mais XP')),
+                DropdownMenuItem(value: 1, child: Text('Mais pontos')),
                 DropdownMenuItem(value: 2, child: Text('Nome da tarefa')),
               ],
               onChanged: (v) => update(() => sort = v!),

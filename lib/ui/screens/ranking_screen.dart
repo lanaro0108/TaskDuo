@@ -34,6 +34,11 @@ class _RankingScreenState extends State<RankingScreen> {
           selected: _period,
           onChanged: (i) => setState(() => _period = i),
         ),
+        const SizedBox(height: 10),
+        Text(
+          'O prêmio usa o resultado das semanas encerradas. A semana atual ainda está em disputa.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
         const SizedBox(height: 18),
         AppCard(
           gradient: p.hero,
@@ -49,7 +54,7 @@ class _RankingScreenState extends State<RankingScreen> {
                       state.active,
                       points: own,
                       label: 'Você',
-                      winner: own >= other && own > 0,
+                      winner: own > other,
                     ),
                   ),
                   Container(
@@ -115,8 +120,8 @@ class _RankingScreenState extends State<RankingScreen> {
                 own == other
                     ? 'Em sintonia! A dupla está empatada.'
                     : own > other
-                    ? 'Você está ${own - other} XP à frente. Continue assim!'
-                    : '${state.partner.name} está ${other - own} XP à frente. Vamos lá!',
+                    ? 'Você está ${own - other} pontos à frente. Continue assim!'
+                    : '${state.partner.name} está ${other - own} pontos à frente. Vamos lá!',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -139,16 +144,16 @@ class _RankingScreenState extends State<RankingScreen> {
               child: StatCard(
                 art: 'sparkles',
                 value: '$own',
-                label: 'XP',
+                label: 'Pontos',
                 compact: true,
               ),
             ),
             const SizedBox(width: 9),
             Expanded(
               child: StatCard(
-                art: 'coin',
-                value: '${state.coins(state.active.id)}',
-                label: 'Moedas',
+                art: 'fire',
+                value: '${state.streak(state.active.id)}',
+                label: 'Dias seguidos',
                 compact: true,
               ),
             ),
@@ -305,7 +310,7 @@ class _Contender extends StatelessWidget {
       ),
       const SizedBox(height: 3),
       Text(
-        '$points XP',
+        '$points pontos',
         style: TextStyle(
           color: Palette.of(context).dark
               ? const Color(0xffbeb3ff)

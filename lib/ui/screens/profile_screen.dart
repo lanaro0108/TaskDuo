@@ -42,7 +42,7 @@ class ProfileScreen extends StatelessWidget {
                     bottom: 0,
                     right: 0,
                     child: SizedBox.square(
-                      dimension: 33,
+                      dimension: 48,
                       child: IconButton.filled(
                         tooltip: 'Editar meu perfil',
                         onPressed: () => showMemberEditor(context, member),
@@ -70,7 +70,7 @@ class ProfileScreen extends StatelessWidget {
                   const Art('trophy', size: 16),
                   const SizedBox(width: 5),
                   Text(
-                    'Guardiã da Casa',
+                    'Cuidando da nossa casa',
                     style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: p.ink),
                   ),
@@ -115,9 +115,9 @@ class ProfileScreen extends StatelessWidget {
           children: [
             Expanded(
               child: StatCard(
-                art: 'coin',
-                value: '${state.coins(member.id)}',
-                label: 'Moedas',
+                art: 'trophy',
+                value: '${state.points(member.id)}',
+                label: 'Pontos',
                 compact: true,
               ),
             ),
@@ -135,12 +135,14 @@ class ProfileScreen extends StatelessWidget {
               child: StatCard(
                 art: 'fire',
                 value: '${state.streak(member.id)}',
-                label: 'Streak',
+                label: 'Sequência',
                 compact: true,
               ),
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        const StreakCard(),
         const SizedBox(height: 20),
         AppCard(
           padding: EdgeInsets.zero,
@@ -291,7 +293,7 @@ class ProfileScreen extends StatelessWidget {
       builder: (c) => AlertDialog(
         title: const Text('Uma nova jornada?'),
         content: const Text(
-          'O histórico de tarefas, XP, moedas e resgates será zerado. Seus nomes, preferências, tarefas pendentes e recompensas serão mantidos. Esta ação não pode ser desfeita.',
+          'O histórico de tarefas, XP, pontos e prêmios será zerado. Seus nomes, preferências, tarefas pendentes e recompensas serão mantidos. Esta ação não pode ser desfeita.',
         ),
         actions: [
           TextButton(
@@ -420,17 +422,13 @@ class _Toggle extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
   @override
-  Widget build(BuildContext context) => Transform.scale(
-    scale: .78,
-    alignment: Alignment.centerRight,
-    child: Switch(
-      value: value,
-      onChanged: onChanged,
-      activeTrackColor: Brand.purple,
-      activeThumbColor: Colors.white,
-      inactiveThumbColor: Palette.of(context).muted,
-      inactiveTrackColor: Palette.of(context).raised,
-      trackOutlineColor: WidgetStatePropertyAll(Palette.of(context).track),
-    ),
+  Widget build(BuildContext context) => Switch(
+    value: value,
+    onChanged: onChanged,
+    activeTrackColor: Brand.purple,
+    activeThumbColor: Colors.white,
+    inactiveThumbColor: Palette.of(context).muted,
+    inactiveTrackColor: Palette.of(context).raised,
+    trackOutlineColor: WidgetStatePropertyAll(Palette.of(context).track),
   );
 }

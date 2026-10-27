@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskduo/domain/duo_state.dart';
@@ -8,203 +10,355 @@ import 'test_store.dart';
 void main() {
   late DuoState state;
   late TestStore store;
-  var now = DateTime(2026, 10, 26, 12);
+  late DateTime now;
   setUp(() async {
     now = DateTime(2026, 10, 26, 12);
     store = TestStore();
     state = DuoState(store, clock: () => now);
     await state.load();
   });
-  void create(
+  String create(
     String title, {
     String member = 'ana',
     Recurrence recurrence = Recurrence.none,
-  }) => state.saveTask(
-    title: title,
-    description: 'Cuidar da casa',
-    memberId: member,
-    category: TaskCategory.kitchen,
-    difficulty: Difficulty.easy,
-    due: now,
-    recurrence: recurrence,
-  );
-
-  test('completion awards the assignee once and creates exactly one next recurrence', () {
-    final original = state.tasks.firstWhere((t) => t.id == 'starter-0');
-    final beforeXp = state.xp('ana'),
-        beforeCoins = state.coins('ana'),
-        beforeCount = state.completions.length;
-    expect(state.completeTask('starter-0'), isNotNull);
-    expect(state.completeTask('starter-0'), isNull);
-    expect(state.xp('ana'), beforeXp + 20);
-    expect(state.coins('ana'), beforeCoins + 5);
-    expect(state.completions.length, beforeCount + 1);
-    final next = state.tasks
-        .where((t) => t.title == 'Lavar a louça' && !t.done)
-        .toList();
-    expect(next, hasLength(1));
-    expect(next.single.due, DateTime(2026, 10, 27));
-    expect(
-      () => state.saveTask(
-        existing: original,
-        title: original.title,
-        description: '',
-        memberId: original.memberId,
-        category: original.category,
-        difficulty: original.difficulty,
-        due: now,
-        recurrence: original.recurrence,
-      ),
-      throwsStateError,
+  }) {
+    state.saveTask(
+      title: title,
+      description: '',
+      memberId: member,
+      category: TaskCategory.kitchen,
+      difficulty: Difficulty.easy,
+      due: now,
+      recurrence: recurrence,
     );
-    expect(state.completeTask(next.single.id), isNull);
-    expect(state.xp('ana'), beforeXp + 20);
-  });
-  test('insufficient funds cannot create a redemption or negative balance', () {
-    expect(state.redeem('movie'), isNull);
-    expect(state.redeem('movie'), isNull);
-    expect(state.coins('ana'), 20);
-    expect(state.redeem('movie'), contains('Faltam 30'));
-    expect(state.redemptions, hasLength(2));
-    expect(state.coins('ana'), 20);
-  });
+    return state.tasks.last.id;
+  }
+
+  void complete({String member = 'ana'}) =>
+      state.completeTask(create('Cuidar da casa', member: member));
+
   test(
-    'profiles have separate balances and only own redemptions can be used',
-    () {
-      state.redeem('movie');
-      final redeemed = state.redemptions.single;
-      state.switchMember('bruna');
-      state.useRedemption(redeemed.id);
-      expect(state.redemptions.single.used, isFalse);
-      expect(state.coins('bruna'), 100);
-      state.redeem('break');
-      expect(state.coins('bruna'), 20);
-      expect(state.coins('ana'), 70);
-      state.switchMember('ana');
-      state.useRedemption(redeemed.id);
-      expect(state.redemptions.first.used, isTrue);
-    },
-  );
-  test(
-    'latest state survives queued saves and a complete app reload',
+    'a new household is empty and can create and restore its first reward',
     () async {
-      state.completeTask('starter-2');
-      state.setTheme(ThemeMode.dark);
-      state.editMember('ana', 'Lia', 2);
-      state.redeem('movie');
-      state.setSounds(true);
+      expect(state.tasks, isEmpty);
+      expect(state.rewards, isEmpty);
+      expect(state.completions, isEmpty);
+      expect(state.xp('ana'), 0);
+      state.addReward('Cinema', 'Escolher o filme', 'popcorn');
       await state.flush();
       final restored = DuoState(store, clock: () => now);
       await restored.load();
-      expect(restored.active.name, 'Lia');
-      expect(restored.active.avatar, 2);
-      expect(restored.themeMode, ThemeMode.dark);
-      expect(restored.sounds, isTrue);
-      expect(
-        restored.tasks.firstWhere((t) => t.id == 'starter-2').done,
-        isTrue,
-      );
-      expect(restored.redemptions.single.title, 'Escolher o filme da noite');
-      expect(restored.coins('ana'), state.coins('ana'));
-      expect(restored.completions.length, state.completions.length);
+      expect(restored.persistenceError, isNull);
+      expect(restored.rewards.single.title, 'Cinema');
+      restored.addReward('Sobremesa', '', 'icecream');
+      expect(restored.rewards, hasLength(2));
     },
   );
-  test(
-    'weekly challenge pays each member once, even after more completions',
-    () {
-      state.startFresh();
-      for (var i = 0; i < 10; i++) {
-        create('Missão $i', member: i.isEven ? 'ana' : 'bruna');
-        state.completeTask(state.tasks.last.id);
-      }
-      expect(state.challengeClaimed, isTrue);
-      expect(state.coins('ana'), 75);
-      expect(state.coins('bruna'), 75);
-      create('Missão extra');
-      state.completeTask(state.tasks.last.id);
-      expect(state.coins('ana'), 80);
-      expect(state.coins('bruna'), 75);
-    },
-  );
-  test(
-    'streak breaks after a missed day and ranking respects month boundaries',
-    () {
-      state.startFresh();
-      now = DateTime(2026, 9, 30, 12);
-      create('Missão setembro');
-      state.completeTask(state.tasks.last.id);
-      now = DateTime(2026, 10, 1, 12);
-      create('Missão outubro');
-      state.completeTask(state.tasks.last.id);
-      expect(state.streak('ana'), 2);
-      expect(state.periodXp('ana', 1), 15);
-      expect(state.periodXp('ana', 2), 30);
-      now = DateTime(2026, 10, 3, 12);
-      expect(state.streak('ana'), 0);
-    },
-  );
-  test('editing reassignment changes who earns points; deletion preserves earned history', () {
-    final task = state.tasks.firstWhere((t) => t.id == 'starter-1');
-    final before = state.xp('ana');
-    state.saveTask(
-      existing: task,
-      title: 'Arrumar o quarto',
-      description: '',
-      memberId: 'ana',
-      category: task.category,
-      difficulty: task.difficulty,
-      due: now,
-      recurrence: Recurrence.none,
+
+  test('completion awards the assignee once and blocks the next recurring occurrence', () {
+    final id = create('Louça', member: 'bruna', recurrence: Recurrence.daily);
+    final original = state.tasks.last;
+    expect(state.completeTask(id), isNotNull);
+    expect(state.completeTask(id), isNull);
+    expect(state.points('bruna'), 15);
+    expect(state.points('ana'), 0);
+    expect(state.tasks.last.due, DateTime(2026, 10, 27));
+    expect(state.completeTask(state.tasks.last.id), isNull);
+    expect(
+      () => state.saveTask(
+        existing: original,
+        title: 'Outra',
+        description: '',
+        memberId: 'ana',
+        category: original.category,
+        difficulty: original.difficulty,
+        due: now,
+        recurrence: Recurrence.none,
+      ),
+      throwsStateError,
     );
-    state.completeTask(task.id);
-    state.deleteTask(task.id);
-    expect(state.tasks.where((t) => t.id == task.id), isEmpty);
-    expect(state.xp('ana'), before + task.xp);
-    expect(state.completions.where((c) => c.taskId == task.id), hasLength(1));
   });
+
   test(
-    'invalid task and reward input is rejected before changing the household',
-    () {
-      final count = state.tasks.length;
-      expect(() => create('   '), throwsArgumentError);
-      expect(state.tasks.length, count);
-      expect(
-        () => state.addReward('Prêmio', '', -5, 'gift'),
-        throwsArgumentError,
-      );
-      expect(state.rewards, hasLength(5));
+    'only the winner can choose one reward after the week has closed',
+    () async {
+      state.addReward('Cinema', '', 'popcorn');
+      final reward = state.rewards.single.id;
+      complete();
+      complete();
+      complete(member: 'bruna');
+      expect(state.redeem(reward), isNotNull);
+      expect(state.redemptions, isEmpty);
+      now = DateTime(2026, 11, 1, 23, 59, 59);
+      expect(state.redeem(reward), isNotNull);
+      now = DateTime(2026, 11, 2);
+      expect(state.points('ana'), 0);
+      expect(state.xp('ana'), 30);
+      final result = state.closedCompetitions.single;
+      expect(result.winnerId, 'ana');
+      state.switchMember('bruna');
+      expect(state.redeem(reward, periodKey: result.key), isNotNull);
+      state.switchMember('ana');
+      expect(state.redeem(reward, periodKey: result.key), isNull);
+      expect(state.redeem(reward, periodKey: result.key), isNotNull);
+      expect(state.redemptions, hasLength(1));
+      expect(state.xp('ana'), 30);
+      state.switchMember('bruna');
+      state.useRedemption(state.redemptions.single.id);
+      expect(state.redemptions.single.used, isFalse);
+      state.switchMember('ana');
+      state.useRedemption(state.redemptions.single.id);
+      await state.flush();
+      final restored = DuoState(store, clock: () => now);
+      await restored.load();
+      expect(restored.persistenceError, isNull);
+      expect(restored.redemptions.single.used, isTrue);
+      expect(restored.redeem(reward, periodKey: result.key), isNotNull);
     },
   );
+
+  test('ties and empty weeks do not award a reward', () {
+    state.addReward('Cinema', '', 'popcorn');
+    complete();
+    complete(member: 'bruna');
+    now = DateTime(2026, 11, 2);
+    final result = state.closedCompetitions.single;
+    expect(result.winnerId, isNull);
+    expect(
+      state.redeem(state.rewards.single.id, periodKey: result.key),
+      isNotNull,
+    );
+    now = DateTime(2026, 11, 9);
+    expect(state.closedCompetitions, hasLength(1));
+    expect(state.unclaimedWins, isEmpty);
+  });
+
+  test('unclaimed wins can be chosen later and are separate for each week', () {
+    state.addReward('Cinema', '', 'popcorn');
+    complete();
+    now = DateTime(2026, 11, 2, 12);
+    complete(member: 'bruna');
+    now = DateTime(2026, 11, 9, 12);
+    expect(state.unclaimedWins.single.key, '2026-10-26');
+    expect(state.redeem(state.rewards.single.id), isNull);
+    state.switchMember('bruna');
+    expect(state.unclaimedWins.single.key, '2026-11-02');
+    expect(state.redeem(state.rewards.single.id), isNull);
+    expect(state.redemptions, hasLength(2));
+  });
+
+  test('streak counts distinct calendar days, preserves yesterday and the best run', () async {
+    for (var i = 0; i < 7; i++) {
+      now = DateTime(2026, 12, 27 + i, 12);
+      complete();
+      complete();
+    }
+    expect(state.streak('ana'), 7);
+    expect(state.longestStreak('ana'), 7);
+    expect(state.streak('bruna'), 0);
+    now = DateTime(2027, 1, 3, 23, 59);
+    expect(state.streak('ana'), 7);
+    expect(state.streakSummary('ana').completedToday, isFalse);
+    now = DateTime(2027, 1, 4);
+    expect(state.streak('ana'), 0);
+    expect(state.longestStreak('ana'), 7);
+    expect(state.achievements('ana')[1].unlocked, isTrue);
+    complete();
+    expect(state.streak('ana'), 1);
+    state.deleteTask(state.tasks.last.id);
+    expect(state.todayDone, 1);
+    expect(state.streak('ana'), 1);
+    await state.flush();
+    final restored = DuoState(store, clock: () => now);
+    await restored.load();
+    expect(restored.persistenceError, isNull);
+    expect(restored.longestStreak('ana'), 7);
+    expect(restored.achievements('ana')[1].unlocked, isTrue);
+  });
+
+  test('invalid commands leave the household unchanged', () {
+    expect(() => create('   '), throwsArgumentError);
+    expect(() => state.addReward('', '', 'gift'), throwsArgumentError);
+    expect(
+      () => state.addReward('Prêmio', '', '../other'),
+      throwsArgumentError,
+    );
+    expect(
+      () => state.editMember('ana', 'Lia', avatarOptions.length),
+      throwsArgumentError,
+    );
+    expect(state.tasks, isEmpty);
+    expect(state.rewards, isEmpty);
+  });
+
+  test('new avatar styles and all queued actions survive reload', () async {
+    create('Plantas');
+    state.setTheme(ThemeMode.dark);
+    state.editMember('ana', 'Leo', 7);
+    state.editMember('bruna', 'Lia', 4);
+    state.setSounds(true);
+    await state.flush();
+    final restored = DuoState(store, clock: () => now);
+    await restored.load();
+    expect(restored.persistenceError, isNull);
+    expect(restored.active.name, 'Leo');
+    expect(restored.active.avatar, 7);
+    expect(restored.partner.avatar, 4);
+    expect(restored.themeMode, ThemeMode.dark);
+    expect(restored.sounds, isTrue);
+    expect(restored.tasks.single.title, 'Plantas');
+  });
+
   test(
-    'failed device writes are visible and retry saves the current state',
+    'failed writes can retry and corrupt reads never overwrite saved bytes',
     () async {
       store.failWrites = true;
       state.setTheme(ThemeMode.dark);
       await state.flush();
       expect(state.persistenceError, isNotNull);
-      expect(store.value, isNull);
       store.failWrites = false;
       state.retrySave();
       await state.flush();
       expect(state.persistenceError, isNull);
-      final restored = DuoState(store);
+      store.value = '{invalid';
+      final restored = DuoState(store, clock: () => now);
       await restored.load();
-      expect(restored.themeMode, ThemeMode.dark);
+      restored.setTheme(ThemeMode.light);
+      await restored.flush();
+      expect(restored.persistenceError, isNotNull);
+      expect(store.value, '{invalid');
     },
   );
-  test(
-    'corrupt storage is diagnosed without overwriting the original bytes',
-    () async {
-      store.value = '{not valid JSON';
-      final restored = DuoState(store);
+
+  final invalidSaves = <String, void Function(Map<String, dynamic>)>{
+    'duplicate members': (j) => j['members'][1]['id'] = 'ana',
+    'orphan task': (j) => j['tasks'][0]['memberId'] = 'missing',
+    'duplicate tasks': (j) => j['tasks'].add(j['tasks'][0]),
+    'negative points': (j) => j['tasks'][0]['xp'] = -1,
+    'unknown avatar': (j) => j['members'][0]['avatar'] = 99,
+    'invalid reward': (j) => j['rewards'][0]['art'] = 'unknown',
+    'inconsistent history': (j) =>
+        j['tasks'][0]['completedAt'] = '2026-10-26T12:00:00.000',
+    'invalid preferences': (j) => j['sounds'] = 'false',
+    'unsupported version': (j) => j['version'] = 42,
+    'invalid competition date': (j) => j['competitionStart'] = '2026-02-30',
+  };
+  for (final entry in invalidSaves.entries) {
+    test('rejects ${entry.key} without overwriting the save', () async {
+      create('Plantas');
+      state.addReward('Cinema', '', 'popcorn');
+      await state.flush();
+      final json = jsonDecode(store.value!) as Map<String, dynamic>;
+      entry.value(json);
+      final original = jsonEncode(json);
+      store.value = original;
+      final restored = DuoState(store, clock: () => now);
       await restored.load();
-      expect(restored.persistenceError, contains('ler os dados'));
-      expect(store.value, '{not valid JSON');
-      expect(store.writes, 0);
+      expect(restored.persistenceError, isNotNull);
       restored.setTheme(ThemeMode.dark);
       await restored.flush();
-      expect(store.value, '{not valid JSON');
-      expect(restored.persistenceError, isNotNull);
+      expect(store.value, original);
+    });
+  }
+
+  test('version 1 migration removes examples and preserves custom work and old redemptions', () async {
+    final id = create('Minhas plantas');
+    state.completeTask(id);
+    state.addReward('Meu prêmio', '', 'gift');
+    await state.flush();
+    final j = jsonDecode(store.value!) as Map<String, dynamic>;
+    j['version'] = 1;
+    j.remove('competitionStart');
+    j['sampleData'] = true;
+    j['members'][0]['baseXp'] = 2000;
+    j['members'][0]['baseCompleted'] = 33;
+    j['rewards'][0]['cost'] = 50;
+    j['rewards'].add(
+      HouseReward(
+        id: 'movie',
+        title: 'Exemplo',
+        description: '',
+        cost: 50,
+        art: 'popcorn',
+      ).toJson(),
+    );
+    j['tasks'].add(
+      HouseTask(
+        id: 'starter-0',
+        title: 'Exemplo',
+        memberId: 'ana',
+        category: TaskCategory.kitchen,
+        difficulty: Difficulty.easy,
+        due: now,
+        xp: 20,
+        coins: 5,
+      ).toJson(),
+    );
+    j['completions'].add(
+      Completion(
+        taskId: 'example-ana-0',
+        title: 'Exemplo',
+        memberId: 'ana',
+        at: now,
+        xp: 30,
+        coins: 100,
+        category: TaskCategory.kitchen,
+      ).toJson(),
+    );
+    j['redemptions'].add(
+      Redemption(
+        id: 'legacy-prize',
+        rewardId: 'movie',
+        title: 'Prêmio antigo',
+        art: 'popcorn',
+        memberId: 'ana',
+        cost: 50,
+        at: now,
+      ).toJson(),
+    );
+    store.value = jsonEncode(j);
+    final restored = DuoState(store, clock: () => now);
+    await restored.load();
+    expect(restored.persistenceError, isNull);
+    expect(restored.tasks.single.title, 'Minhas plantas');
+    expect(restored.rewards.single.title, 'Meu prêmio');
+    expect(restored.completions, hasLength(1));
+    expect(restored.xp('ana'), 15);
+    expect(restored.redemptions.single.title, 'Prêmio antigo');
+    expect(restored.unclaimedWins, isEmpty);
+    restored.setTheme(ThemeMode.dark);
+    await restored.flush();
+    expect(jsonDecode(store.value!)['version'], 2);
+    final again = DuoState(store, clock: () => now);
+    await again.load();
+    expect(again.persistenceError, isNull);
+    expect(again.completions, hasLength(1));
+  });
+
+  test(
+    'date refresh notifies once per day without saving a new transaction',
+    () async {
+      var notifications = 0;
+      state.addListener(() => notifications++);
+      state.refreshDate();
+      expect(notifications, 0);
+      now = DateTime(2026, 10, 27);
+      state.refreshDate();
+      state.refreshDate();
+      expect(notifications, 1);
+      expect(store.writes, 0);
     },
   );
+  test('the collective challenge records once without adding extra points', () {
+    for (var i = 0; i < 11; i++) {
+      complete();
+    }
+    expect(state.challengeClaimed, isTrue);
+    expect(state.points('ana'), 165);
+    expect(
+      state.activities.where((a) => a.text.startsWith('Desafio da semana')),
+      hasLength(1),
+    );
+    expect(state.achievements('ana')[3].unlocked, isTrue);
+  });
 }

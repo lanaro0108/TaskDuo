@@ -93,8 +93,7 @@ class SectionTitle extends StatelessWidget {
             onPressed: onAction,
             style: TextButton.styleFrom(
               padding: const EdgeInsets.only(left: 8),
-              minimumSize: const Size(0, 32),
-              visualDensity: VisualDensity.compact,
+              minimumSize: const Size(48, 48),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -158,31 +157,6 @@ class ProgressLine extends StatelessWidget {
   );
 }
 
-class CoinLabel extends StatelessWidget {
-  const CoinLabel(this.value, {super.key, this.suffix = '', this.size = 14});
-  final int value;
-  final String suffix;
-  final double size;
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Art('coin', size: size + 8),
-      const SizedBox(width: 4),
-      Flexible(
-        child: Text(
-          '$value$suffix',
-          style: TextStyle(
-            fontSize: size,
-            fontWeight: FontWeight.w900,
-            color: Palette.of(context).ink,
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
 class StatCard extends StatelessWidget {
   const StatCard({
     super.key,
@@ -196,37 +170,69 @@ class StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppCard(
     padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14, vertical: 13),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Art(art, size: compact ? 27 : 35),
-        SizedBox(width: compact ? 6 : 10),
-        Flexible(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    child: compact
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: compact ? 16 : 21,
-                  fontWeight: FontWeight.w900,
-                  height: 1.15,
-                  color: Palette.of(context).ink,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Art(art, size: 27),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Palette.of(context).ink,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 5),
               Text(
                 label,
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: compact ? 10 : 12,
+                  fontSize: 10,
                   color: Palette.of(context).muted,
                 ),
               ),
             ],
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Art(art, size: compact ? 27 : 35),
+              SizedBox(width: compact ? 6 : 10),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: compact ? 16 : 21,
+                        fontWeight: FontWeight.w900,
+                        height: 1.15,
+                        color: Palette.of(context).ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: compact ? 10 : 12,
+                        color: Palette.of(context).muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
-    ),
   );
 }
 
@@ -260,6 +266,8 @@ class Segments extends StatelessWidget {
                 borderRadius: BorderRadius.circular(21),
                 onTap: () => onChanged(i),
                 child: AnimatedContainer(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  alignment: Alignment.center,
                   duration: Duration(
                     milliseconds: DuoScope.of(context).animations ? 180 : 0,
                   ),
@@ -395,7 +403,7 @@ class TaskTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${task.category.label} · ${task.xp} XP',
+                    '${task.category.label} · ${task.xp} pontos',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -409,7 +417,7 @@ class TaskTile extends StatelessWidget {
                 tooltip: task.done
                     ? 'Tarefa concluída'
                     : 'Concluir ${task.title}',
-                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: task.done ? null : () => finishTask(context, task),
                 icon: Icon(
                   task.done
@@ -475,7 +483,7 @@ void finishTask(BuildContext context, HouseTask task) {
   final prefix = state.level(task.memberId) > oldLevel
       ? 'Nível ${state.level(task.memberId)} desbloqueado! '
       : 'Muito bem, ${state.member(task.memberId).name}! ';
-  toast(context, '$prefix+${completion.xp} XP e +${completion.coins} moedas.');
+  toast(context, '$prefix+${completion.xp} pontos. Seu XP também evoluiu!');
 }
 
 class EmptyState extends StatelessWidget {
@@ -538,7 +546,7 @@ class GoalCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   state.challengeClaimed
-                      ? '+50 moedas para cada. Vocês arrasaram!'
+                      ? 'Dez cuidados com a casa. Vocês arrasaram!'
                       : 'Concluir 10 tarefas em dupla',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
